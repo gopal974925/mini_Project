@@ -1,6 +1,8 @@
 const express =require('express');
 const path = require('path');
 const User=require('./models/user');
+const jwt=require("jsonwebtoken");
+const bcrypt=require("bcrypt")
 const app = express();
 const port =3001;
 
@@ -18,20 +20,48 @@ app.get('/register', (req, res) => {
   res.render('register');
 });
 
-app.post('/register',async (req,res)=>{
+app.post('/register', (req,res)=>{
     const { username, email, password, DOB } = req.body;
-
-    const user=new User({
-        username,
-        email,
-        password,
-        DOB
+    bcrypt.genSalt(10, function(err, salt) {
+        bcrypt.hash(password, salt, async function(err, hash) { 
+            const user=await new User({
+                username,
+                email,
+                password:hash,
+                DOB
+            })
+            const token = jwt.sign({ email: user.email }, 'your_secret_key', { expiresIn: '1h' });
+            res.cookie('token', token);
+            user.save();
+            res.redirect('/profile');
+        }  )
     })
-    await user.save();
-
-    console.log(user);
-    res.redirect('/');
+    
 })
+
+app.post('/login', async (req,res)=>{
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) {
+        return res.status(400).send('Something Went Wrong');
+    }
+
+    bcrypt.compare(password, user.password, function(err, result) {
+        if (result) {
+            const token = jwt.sign({ email: user.email }, 'your_secret_key', { expiresIn: '1h' });
+            res.cookie('token', token);
+            res.redirect('/profile');
+        } else {
+            res.status(400).send('Something Went Wrong');
+        }
+    });
+}
+);
+
+app.get('/logout', (req, res) => {
+    res.clearCookie('token');
+    res.redirect('/');
+});
 
 
 app.get('/profile', async (req,res)=>{
